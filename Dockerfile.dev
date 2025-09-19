@@ -1,0 +1,40 @@
+FROM --platform=linux/amd64 node:22.18.0-alpine AS builder
+
+# add chromium package for puppeteer and tini for process management
+RUN apk add --no-cache \
+    chromium \
+    tini \
+    && rm -rf /var/cache/apk/*
+
+RUN node -v
+
+# Create app directory and set ownership
+WORKDIR /usr/src/app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci \
+    && npm cache clean --force
+
+# Copy source
+COPY . .
+
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+    && chown -R appuser:appgroup /usr/src/app
+
+# Switch to non-root user
+USER appuser
+
+# Set environment variables for Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Expose development port
+EXPOSE 4500
+
+# Use tini as entrypoint
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start development server
+CMD ["npm", "run", "start:development"]

@@ -1,0 +1,160 @@
+name: Trivy Scan & Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write   # required for SARIF upload
+
+jobs:
+  build:
+    name: Build → Trivy Scan → Push to ECR
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      IMAGE_TAG: latest
+      # Trivy policy knobs
+      TRIVY_SEVERITY: CRITICAL,HIGH
+      TRIVY_IGNOREFIXED: "true"   # ignore vulns with no upstream fix (optional)
+      TRIVY_EXIT_CODE: "1"        # fail build on findings with selected severities
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # ---------- Trivy: Filesystem scan (repo) ----------
+      - name: Trivy FS scan (dependencies & secrets)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: ${{ env.TRIVY_IGNOREFIXED }}
+          vuln-type: "os,library"
+          scanners: "vuln,secret,misconfig"
+          cache: true
+          exit-code: ${{ env.TRIVY_EXIT_CODE }}
+
+      - name: Upload FS scan to code scanning
+        if: always() # still upload even if it failed to show results in UI
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      # ---------- AWS & ECR login ----------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ---------- Branch → repo & Dockerfile selection ----------
+      - name: Determine ECR Repository name
+        id: ecr_repository_name
+        run: |
+          if [[ $GITHUB_REF == "refs/heads/copy-develop" ]]; then
+            echo "ECR_IMAGE_NAME=stable-development"  >> $GITHUB_OUTPUT
+            echo "DOCKERFILE_NAME=Dockerfile.dev"  >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == "refs/heads/sprint18" ]]; then
+            echo "ECR_IMAGE_NAME=stable-development"  >> $GITHUB_OUTPUT
+            echo "DOCKERFILE_NAME=Dockerfile.dev"  >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == "refs/heads/payloadInNotification" ]]; then
+            echo "ECR_IMAGE_NAME=stable-development"  >> $GITHUB_OUTPUT
+            echo "DOCKERFILE_NAME=Dockerfile.dev"  >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == "refs/heads/onepayWebhookQueue" ]]; then
+            echo "ECR_IMAGE_NAME=stable-development"  >> $GITHUB_OUTPUT
+            echo "DOCKERFILE_NAME=Dockerfile.dev"  >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == "refs/heads/_security_optimizations" ]]; then
+            echo "ECR_IMAGE_NAME=stable-development"  >> $GITHUB_OUTPUT
+            echo "DOCKERFILE_NAME=Dockerfile.dev"  >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == "refs/heads/main" ]]; then
+            echo "ECR_IMAGE_NAME=stable-production"  >> $GITHUB_OUTPUT
+            echo "DOCKERFILE_NAME=Dockerfile.production"  >> $GITHUB_OUTPUT
+          else
+            echo "The value of GITHUB_REF is $GITHUB_REF"
+            echo "::error:: Branch not supported for deployment"
+            exit 1
+          fi
+
+      - name: Output ECR Repository Name
+        run: |
+          echo " **** ECR Repository name is ${{ steps.ecr_repository_name.outputs.ECR_IMAGE_NAME }} ****"
+          echo " **** Dockerfile name is ${{ steps.ecr_repository_name.outputs.DOCKERFILE_NAME }} ****"
+
+      # ---------- Build image (tag with latest + short SHA) ----------
+      - name: Build Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ steps.ecr_repository_name.outputs.ECR_IMAGE_NAME }}
+          DOCKERFILE_NAME: ${{ steps.ecr_repository_name.outputs.DOCKERFILE_NAME }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          docker build -f "$DOCKERFILE_NAME" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.IMAGE_TAG }}" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA" \
+            .
+
+          echo "image_latest=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.IMAGE_TAG }}" >> $GITHUB_OUTPUT
+          echo "image_sha=$ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      # ---------- Trivy: Image scan (fail before push if bad) ----------
+      - name: Trivy Image scan (block push on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.build-image.outputs.image_sha }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: ${{ env.TRIVY_IGNOREFIXED }}
+          vuln-type: "os,library"
+          scanners: "vuln"
+          cache: true
+          exit-code: ${{ env.TRIVY_EXIT_CODE }}
+
+      - name: Upload Image scan to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      # ---------- Optional: save human-friendly HTML reports ----------
+      - name: Generate HTML reports (optional)
+        if: always()
+        run: |
+          # Re-run to get HTML (doesn't affect pass/fail)
+          trivy fs --format template --template "@contrib/html.tpl" -o trivy-fs.html \
+            --severity $TRIVY_SEVERITY --ignore-unfixed=$TRIVY_IGNOREFIXED .
+          trivy image --format template --template "@contrib/html.tpl" -o trivy-image.html \
+            --severity $TRIVY_SEVERITY --ignore-unfixed=$TRIVY_IGNOREFIXED \
+            "${{ steps.build-image.outputs.image_sha }}" || true
+        shell: bash
+
+      - name: Upload HTML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports
+          path: |
+            trivy-fs.sarif
+            trivy-image.sarif
+            trivy-fs.html
+            trivy-image.html
+
+      # # ---------- Push only if scans passed ----------
+      # - name: Push image to Amazon ECR
+      #   if: success()
+      #   run: |
+      #     docker push "${{ steps.build-image.outputs.image_sha }}"
+      #     docker push "${{ steps.build-image.outputs.image_latest }}"

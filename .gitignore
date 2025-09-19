@@ -1,0 +1,16 @@
+node_modules
+.env.local
+.env.development
+.env.production
+production.env
+development.env
+./logs
+logs
+logs/fatal.log
+*.log
+logs/error.log
+data
+.vscode/settings.json
+/.vscode
+/.vscode
+.cursor/rules/main.mdc

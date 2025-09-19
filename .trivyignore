@@ -1,0 +1,14 @@
+# Ignore Node.js debugger vulnerabilities (if you're not using it in production)
+CVE-2020-8287
+CVE-2020-8265
+CVE-2020-8266
+
+# Ignore vulnerabilities in dev dependencies (adjust as needed)
+CVE-2020-28469
+CVE-2021-23343
+
+# Ignore vulnerabilities that are known false positives
+CVE-2023-2650  # Chromium in Alpine (we need this for Puppeteer)
+
+# Ignore vulnerabilities in dependencies that are only used in development
+CVE-2020-7598  # minimist (only used in dev)

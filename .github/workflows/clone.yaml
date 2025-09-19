@@ -1,0 +1,33 @@
+name: Sync GitHub to Azure DevOps
+
+on:
+  push:
+    branches:
+      - '*'  # Trigger on push to any branch
+
+jobs:
+  sync_to_azure:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout GitHub repository with full history
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Fetch the entire commit history
+
+    - name: Set up Git configuration
+      run: |
+        # Fallback incase of failure to get user data
+        git config user.name "github"
+        git config user.email "git@stable-life.com"
+    - name: Add Azure DevOps remote
+      run: |
+        git remote add azure https://${{ secrets.AZURE_DEVOPS_TOKEN }}@dev.azure.com/Stable-life/Stable%20App/_git/Stable-Backend
+    - name: Push to Azure DevOps
+      run: |
+        # Get the branch name of the current push
+        BRANCH_NAME=$(echo ${GITHUB_REF} | sed 's/refs\/heads\///')
+        # Ensure we're on the correct branch
+        git checkout $BRANCH_NAME
+        # Push the branch to Azure DevOps (creating it if it doesn't exist)
+        git push azure $BRANCH_NAME

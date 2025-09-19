@@ -1,0 +1,37 @@
+.card {
+    display: flex;
+    justify-content: start;
+    color: white;
+    background-image: url(https://devapi.stable-app.com/images/card.svg);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    height: 13rem;
+    max-height: 13rem;
+}
+
+.card .pan {
+    color: #FFD1FF;
+}
+
+.card .pan svg {
+    color: #D385D6;
+}
+
+.card .exp-code-container {
+    justify-content: end;
+    gap: 10px;
+}
+
+
+.card .expiration-date,
+.card .pin,
+.card .security-code {
+    color: #ffffff;
+}
+
+.card .name {
+    top: -18px;
+    position: relative;
+    color: #ffffff;
+}

@@ -1,0 +1,57 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules
+coverage
+
+# IDE specific files
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Environment files
+.env*
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Test files
+__tests__
+test
+tests
+*.test.js
+
+# Documentation
+*.md
+docs/
+
+# Build files
+dist
+build
+.next
+
+# Debug files
+.npm
+.eslintcache
+*.dump
+
+# Docker
+Dockerfile*
+docker-compose*
+.docker
+
+# Misc
+.cursor/
+*.gz
+*.zip

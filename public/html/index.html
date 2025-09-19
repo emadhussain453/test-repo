@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <script type="text/javascript">
+        function onConversationsAPIReady() {
+            window.HubSpotConversations.widget.load({ widgetOpen: true });
+        }
+        /*
+          configure window.hsConversationsSettings if needed.
+        */
+        // window get parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const email = urlParams.get('email');
+        const token = urlParams.get('token');
+        window.hsConversationsSettings = {
+            identificationEmail: email,
+            identificationToken: token
+        };
+        /*
+         If external API methods are already available, use them.
+        */
+        if (window.HubSpotConversations) {
+            onConversationsAPIReady();
+        } else {
+            /*
+              Otherwise, callbacks can be added to the hsConversationsOnReady on the window object.
+              These callbacks will be called once the external API has been initialized.
+            */
+            window.hsConversationsOnReady = [onConversationsAPIReady];
+        }
+    </script>
+</head>
+
+<body>
+
+
+    <!-- Start of HubSpot Embed Code -->
+    <script type="text/javascript" id="hs-script-loader" async defer value="1"
+        src="https://js-na1.hs-scripts.com/41506338.js">
+        </script>
+    <!-- End of HubSpot Embed Code -->
+</body>
+
+</html>
